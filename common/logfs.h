@@ -8,10 +8,14 @@
 // #include <sys/stat.h> // uid_t, gid_t
 #include <fcntl.h>
 
+struct stat;
+struct fiemap;
+struct statfs;
+struct statvfs;
+
 namespace anystore {
 using ::photon::Timeout;
 using ::photon::retval;
-
 
 #ifndef UNIMPLEMENTED
 #define UNIMPLEMENTED(func)  \
@@ -86,25 +90,29 @@ public:
     }
 };
 
-class ILogStore : public Object {
+class ILogFileSystem : public Object {
 public:
-    virtual retval<ILogFile*> open(uint64_t fileid, int flags, mode_t mode = 0, Timeout timeout = {}) = 0;
-    inline  retval<ILogFile*> creat(uint64_t fileid, mode_t mode, Timeout timeout = {}) {
-        return open(fileid, O_CREAT|O_WRONLY|O_TRUNC, mode, timeout);
+    // if `*fileid_ptr` == -1UL, the logfs will generate a proper id and assign to `*fileid_ptr`
+    virtual retval<ILogFile*> open(uint64_t* /* IN/OUT */ fileid_ptr, uint64_t flags, mode_t mode = 0, Timeout timeout = {}) = 0;
+    inline  retval<ILogFile*> open(uint64_t fileid, uint64_t flags, mode_t mode = 0, Timeout timeout = {}) {
+        return open(&fileid, flags, mode, timeout);
     }
-    virtual retval<int> rename(uint64_t oldid, uint64_t newid, Timeout timeout = {}) = 0;
+    inline  retval<ILogFile*> creat(uint64_t fileid, mode_t mode, Timeout timeout = {}) {
+        return open(fileid, O_CREAT | O_RDWR | O_TRUNC, mode, timeout);
+    }
+    inline  retval<ILogFile*> creat(uint64_t* /* IN/OUT */ fileid_ptr, mode_t mode, Timeout timeout = {}) {
+        if (fileid_ptr) *fileid_ptr = -1UL;
+        return open(fileid_ptr, O_CREAT | O_RDWR | O_TRUNC, mode, timeout);
+    }
+
     virtual retval<int> unlink(uint64_t fileid, Timeout timeout = {}) = 0;
     virtual retval<int> truncate(uint64_t fileid, off_t length, Timeout timeout = {}) = 0;
-
     virtual retval<int> stat(uint64_t fileid, struct stat *buf, Timeout timeout = {}) = 0;
     virtual retval<int> lstat(uint64_t fileid, struct stat *buf, Timeout timeout = {}) = 0;
     virtual retval<int> access(uint64_t fileid, int mode, Timeout timeout = {}) = 0;
+    virtual retval<int> sync(Timeout timeout = {}) = 0;
 
-    virtual retval<int> syncfs(Timeout timeout = {}) = 0;
-    inline  retval<int> sync(Timeout timeout = {}) {
-        return syncfs(timeout);
-    }
-
+    UNIMPLEMENTED(retval<int> rename(uint64_t oldid, uint64_t newid, Timeout timeout = {}));
     UNIMPLEMENTED(retval<int> chmod(uint64_t fileid, mode_t mode, Timeout timeout = {}));
     UNIMPLEMENTED(retval<int> chown(uint64_t fileid, uint64_t owner, uint64_t group, Timeout timeout = {}));
     UNIMPLEMENTED(retval<int> lchown(uint64_t fileid, uint64_t owner, uint64_t group, Timeout timeout = {}));
@@ -118,4 +126,4 @@ public:
 };
 
 
-}
+} // namespace anystore
